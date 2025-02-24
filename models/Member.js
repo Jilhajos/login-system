@@ -10,7 +10,7 @@ const MemberSchema = new mongoose.Schema({
     emergency_contact: { type: String },
     health_conditions: { type: String },
     membership_plan: { type: String, required: true },
-    trainerName: { type: String, required: true }, // Storing trainer name instead of ID
+    trainerName: { type: String, required: true },
     password: { type: String, required: true }
 });
 
