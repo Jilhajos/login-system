@@ -5,19 +5,56 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const Member = require('../models/Member');
 const Trainer = require('../models/Trainer');
+const Admin = require('../models/Admin');
 const { sendMail } = require('../utils/mailer');
 
 dotenv.config();
+
+// Admin Registration logic
+const adminRegister = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // Check if the admin already exists
+        const existingAdmin = await Admin.findOne({ email });
+        if (existingAdmin) {
+            return res.status(400).json({ error: 'Admin already exists with this email' });
+        }
+
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Create a new admin user
+        const newAdmin = new Admin({
+            email,
+            password: hashedPassword,
+        });
+
+        await newAdmin.save();  // Save the new admin to the database
+        res.status(201).json({ message: 'Admin registered successfully' });
+    } catch (error) {
+        res.status(500).json({ error: 'Error registering admin', details: error.message });
+    }
+};
 
 // Admin login logic
 const adminLogin = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        if (email !== process.env.ADMIN_EMAIL || password !== process.env.ADMIN_PASSWORD) {
+        // Check if the email exists in the Admin model
+        const admin = await Admin.findOne({ email });
+        if (!admin) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
+        // Check if the password matches
+        const isPasswordValid = await bcrypt.compare(password, admin.password);
+        if (!isPasswordValid) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        // Generate JWT token
         const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
         res.status(200).json({ message: 'Login successful', token });
@@ -53,6 +90,7 @@ const getMemberById = async (req, res) => {
     }
 };
 
+// Edit a member
 const editMember = async (req, res) => {
     try {
         const { memberId } = req.params;
@@ -79,7 +117,7 @@ const editMember = async (req, res) => {
             }
         }
 
-        // **Ensure database updates correctly**
+        // Ensure database updates correctly
         member.name = name;
         member.email = email;
         member.phone = phone;
@@ -99,7 +137,6 @@ const editMember = async (req, res) => {
         res.status(500).json({ error: 'Error updating member', details: error.message });
     }
 };
-
 
 // Add new member
 const addMember = async (req, res) => {
@@ -169,22 +206,27 @@ const deleteMember = async (req, res) => {
     }
 };
 
-// Forgot Password - Send reset token via email
+// Forgot Password - Send reset instruction email to admin
 const forgotPassword = async (req, res) => {
     try {
         const { email } = req.body;
-        const member = await Member.findOne({ email });
 
-        if (!member) return res.status(404).json({ error: 'Member not found' });
+        // Check if the email matches the admin email from the Admin model
+        const admin = await Admin.findOne({ email });
+        if (!admin) {
+            return res.status(404).json({ error: 'Admin not found' });
+        }
 
+        // Generate a reset token
         const resetToken = crypto.randomBytes(32).toString('hex');
-        member.resetToken = resetToken;
-        member.resetTokenExpiration = Date.now() + 3600000; // 1 hour expiration
+        
+        // You can store the reset token in a database or session here for verification later
 
-        await member.save();
-
+        // Construct the reset password link
         const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
-        await sendMail(email, 'Password Reset Request', `Click the link to reset your password: ${resetLink}`);
+
+        // Send reset password email to admin
+        await sendMail(email, 'Admin Password Reset Request', `Click the link to reset your password: ${resetLink}`);
 
         res.status(200).json({ message: 'Password reset email sent' });
     } catch (error) {
@@ -192,22 +234,30 @@ const forgotPassword = async (req, res) => {
     }
 };
 
-// Reset Password
 const resetPassword = async (req, res) => {
     try {
-        const { token, newPassword } = req.body;
-        const member = await Member.findOne({
-            resetToken: token,
-            resetTokenExpiration: { $gt: Date.now() }
-        });
+        const { email, newPassword } = req.body;
 
-        if (!member) return res.status(400).json({ error: 'Invalid or expired token' });
+        // Check if the email exists in the Admin model
+        const admin = await Admin.findOne({ email });
+        if (!admin) {
+            return res.status(404).json({ error: 'Admin not found' });
+        }
 
-        member.password = await bcrypt.hash(newPassword, 10);
-        member.resetToken = undefined;
-        member.resetTokenExpiration = undefined;
+        // If newPassword is not provided, return an error
+        if (!newPassword) {
+            return res.status(400).json({ error: 'New password is required' });
+        }
 
-        await member.save();
+        // Hash the new password
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        // Update the admin password in the database
+        admin.password = hashedPassword;
+        await admin.save();
+
+        // Send a confirmation email
+        await sendMail(email, 'Your password has been reset', 'Your password has been successfully reset.');
 
         res.status(200).json({ message: 'Password reset successful' });
     } catch (error) {
@@ -215,7 +265,9 @@ const resetPassword = async (req, res) => {
     }
 };
 
+
 module.exports = { 
+    adminRegister,  // Added admin registration
     adminLogin, 
     getMembers, 
     getMemberById, 
