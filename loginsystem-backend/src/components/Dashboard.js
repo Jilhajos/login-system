@@ -1,14 +1,12 @@
-// src/components/Dashboard.js
-import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
+    const navigate = useNavigate();
+
     return (
         <div>
             <h2>Admin Dashboard</h2>
-            <nav>
-                <Link to="/members">View Members</Link>
-            </nav>
+            <button onClick={() => navigate("/members")}>Manage Members</button>
         </div>
     );
 };

@@ -18,7 +18,7 @@ const memberSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
-  trainer: {
+  trainerName: {
     type: String,
     required: false
   },

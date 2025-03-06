@@ -6,6 +6,7 @@ const {
     getMemberById, 
     editMember, 
     addMember, 
+    deleteMember,  // Added deleteMember function
     forgotPassword, 
     resetPassword 
 } = require('../controllers/adminController');
@@ -18,6 +19,7 @@ router.get('/members', getMembers);
 router.get('/members/:memberId', getMemberById);
 router.put('/members/:memberId', editMember);
 router.post('/members', addMember);
+router.delete('/members/delete/:memberId', deleteMember);  // Added DELETE route
 
 // Password reset routes
 router.post('/forgot-password', forgotPassword);

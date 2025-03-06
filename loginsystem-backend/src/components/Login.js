@@ -1,48 +1,48 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';  
-import axios from 'axios';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios"; // Directly using axios for API requests
 
 const Login = () => {
-    const [credentials, setCredentials] = useState({ email: '', password: '' });
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
     const navigate = useNavigate();
 
-    const handleChange = (e) => {
-        setCredentials({ ...credentials, [e.target.name]: e.target.value });
-    };
-
-    const handleLogin = async (e) => {
-        e.preventDefault();
+    const handleLogin = async () => {
         try {
-            const response = await axios.post('http://localhost:5000/api/admin/login', credentials);
-            localStorage.setItem('adminToken', response.data.token);
-            navigate('/dashboard'); 
+            const response = await axios.post("http://localhost:5000/api/admin/login", { email, password });
+            localStorage.setItem("token", response.data.token);
+            alert("Login Successful!");
+            navigate("/dashboard"); // Redirect to Dashboard after login
         } catch (error) {
-            alert('Invalid credentials');
+            alert("Login Failed: " + (error.response?.data?.error || "Unknown error"));
         }
     };
 
     return (
-        <div>
+        <div style={{ textAlign: "center", padding: "20px" }}>
             <h2>Admin Login</h2>
-            <form onSubmit={handleLogin}>
+            <div style={{ marginTop: "20px" }}>
                 <input 
                     type="email" 
-                    name="email"
-                    value={credentials.email} 
-                    onChange={handleChange} 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
                     placeholder="Email" 
-                    required 
+                    style={{ padding: "10px", marginBottom: "10px", width: "80%" }}
                 />
                 <input 
                     type="password" 
-                    name="password"
-                    value={credentials.password} 
-                    onChange={handleChange} 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
                     placeholder="Password" 
-                    required 
+                    style={{ padding: "10px", marginBottom: "10px", width: "80%" }}
                 />
-                <button type="submit">Login</button>
-            </form>
+                <button 
+                    onClick={handleLogin} 
+                    style={{ padding: "10px 20px", fontSize: "16px", cursor: "pointer" }}
+                >
+                    Login
+                </button>
+            </div>
         </div>
     );
 };

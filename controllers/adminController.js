@@ -43,18 +43,22 @@ const getMemberById = async (req, res) => {
         const member = await Member.findById(memberId);
         if (!member) return res.status(404).json({ error: 'Member not found' });
 
-        res.status(200).json(member);
+        res.status(200).json({
+            ...member.toObject(),
+            trainerName: member.trainerName,  // Rename trainer to trainerName
+            trainer: undefined  // Hide trainer field
+        });
     } catch (error) {
-        res.status(500).json({ error: 'Error fetching member details', details: error.message });
+        res.status(500).json({ error: 'Error fetching member', details: error.message });
     }
 };
 
-// Edit member details
 const editMember = async (req, res) => {
     try {
         const { memberId } = req.params;
         const { name, email, phone, age, trainerName } = req.body;
 
+        // Find the member
         const member = await Member.findById(memberId);
         if (!member) return res.status(404).json({ error: 'Member not found' });
 
@@ -65,8 +69,9 @@ const editMember = async (req, res) => {
 
             if (!newTrainer.availability) return res.status(400).json({ error: 'Trainer is not available' });
 
-            if (member.trainer && member.trainer !== newTrainer.name) {
-                const previousTrainer = await Trainer.findOne({ name: member.trainer });
+            // Update previous trainer's assigned count
+            if (member.trainerName && member.trainerName !== newTrainer.name) {
+                const previousTrainer = await Trainer.findOne({ name: member.trainerName });
                 if (previousTrainer) {
                     previousTrainer.assignedMembers = Math.max(0, previousTrainer.assignedMembers - 1);
                     await previousTrainer.save();
@@ -74,22 +79,27 @@ const editMember = async (req, res) => {
             }
         }
 
-        const updatedMember = await Member.findByIdAndUpdate(
-            memberId,
-            { name, email, phone, age, trainer: newTrainer ? newTrainer.name : member.trainer },
-            { new: true }
-        );
+        // **Ensure database updates correctly**
+        member.name = name;
+        member.email = email;
+        member.phone = phone;
+        member.age = age;
+        if (newTrainer) member.trainerName = newTrainer.name; // Assign new trainer if provided
 
+        await member.save(); // Explicitly save changes
+
+        // Update new trainer's assigned member count
         if (newTrainer) {
-            newTrainer.assignedMembers = await Member.countDocuments({ trainer: newTrainer.name });
+            newTrainer.assignedMembers = await Member.countDocuments({ trainerName: newTrainer.name });
             await newTrainer.save();
         }
 
-        res.status(200).json({ message: 'Member updated successfully', member: updatedMember });
+        res.status(200).json({ message: 'Member updated successfully', member });
     } catch (error) {
         res.status(500).json({ error: 'Error updating member', details: error.message });
     }
 };
+
 
 // Add new member
 const addMember = async (req, res) => {
@@ -115,7 +125,7 @@ const addMember = async (req, res) => {
             email,
             phone,
             age,
-            trainer: newTrainer ? newTrainer.name : null,
+            trainerName: newTrainer ? newTrainer.name : null,
             password: hashedPassword,
             membership_plan,
             gender
@@ -124,13 +134,38 @@ const addMember = async (req, res) => {
         await newMember.save();
 
         if (newTrainer) {
-            newTrainer.assignedMembers = await Member.countDocuments({ trainer: newTrainer.name });
+            newTrainer.assignedMembers = await Member.countDocuments({ trainerName: newTrainer.name });
             await newTrainer.save();
         }
 
         res.status(201).json({ message: 'Member added successfully', member: newMember });
     } catch (error) {
         res.status(500).json({ error: 'Error adding member', details: error.message });
+    }
+};
+
+// Delete member and update trainer's assigned members count
+const deleteMember = async (req, res) => {
+    try {
+        const { memberId } = req.params;
+
+        const member = await Member.findById(memberId);
+        if (!member) return res.status(404).json({ error: 'Member not found' });
+
+        // If member has an assigned trainer, update the trainer's assigned member count
+        if (member.trainerName) {
+            const trainer = await Trainer.findOne({ name: member.trainerName });
+            if (trainer) {
+                trainer.assignedMembers = Math.max(0, trainer.assignedMembers - 1);
+                await trainer.save();
+            }
+        }
+
+        await Member.findByIdAndDelete(memberId);
+
+        res.status(200).json({ message: 'Member deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ error: 'Error deleting member', details: error.message });
     }
 };
 
@@ -186,6 +221,7 @@ module.exports = {
     getMemberById, 
     editMember, 
     addMember, 
+    deleteMember,  // Added delete functionality
     forgotPassword, 
     resetPassword 
 };

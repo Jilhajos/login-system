@@ -1,76 +1,68 @@
-import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-import axios from "axios";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import axios from "axios";  // Directly using axios for API requests
 
 const EditMember = () => {
-    const { id: memberId } = useParams();  // Get memberId from URL
-    const [formData, setFormData] = useState({
-        name: "",
-        email: "",
-        phone: "",
-        age: "",
-        trainerName: "",
-    });
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const token = localStorage.getItem("token");
 
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
 
     useEffect(() => {
         const fetchMember = async () => {
             try {
-                const response = await axios.get(`http://localhost:5000/api/admin/members/edit/${memberId}`);
-                setFormData({
-                    name: response.data.name || "",
-                    email: response.data.email || "",
-                    phone: response.data.phone || "",
-                    age: response.data.age || "",
-                    trainerName: response.data.trainerName || "",
+                const response = await axios.get(`http://localhost:5000/api/admin/members/${id}`, {
+                    headers: { Authorization: `Bearer ${token}` },
                 });
-                setLoading(false);
+                setName(response.data.name);
+                setEmail(response.data.email);
             } catch (error) {
-                console.error("Error fetching member:", error);
-                setError("Failed to fetch member details.");
-                setLoading(false);
+                console.error("Error fetching member details:", error);
             }
         };
-
         fetchMember();
-    }, [memberId]);
+    }, [id, token]);
 
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
-
-    const handleSave = async () => {
+    const handleUpdate = async () => {
         try {
-            await axios.put(`http://localhost:5000/api/admin/members/edit/${memberId}`, formData);
+            await axios.put(`http://localhost:5000/api/admin/members/${id}`, 
+                { name, email },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
             alert("Member updated successfully!");
+            navigate("/members");
         } catch (error) {
-            console.error("Error updating member:", error);
-            setError("Failed to update member details.");
+            alert("Update failed: " + (error.response?.data?.error || "Unknown error"));
         }
     };
 
-    if (loading) return <p>Loading...</p>;
-    if (error) return <p style={{ color: "red" }}>{error}</p>;
-
     return (
-        <div>
+        <div style={{ textAlign: "center", padding: "20px" }}>
             <h2>Edit Member</h2>
-            <form>
-                {Object.keys(formData).map((field) => (
-                    <input
-                        key={field}
-                        type={field === "age" ? "number" : "text"}
-                        name={field}
-                        value={formData[field]}
-                        onChange={handleChange}
-                        placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
-                        required
-                    />
-                ))}
-                <button type="button" onClick={handleSave}>Save</button>
-            </form>
+            <div style={{ marginTop: "20px" }}>
+                <input 
+                    type="text" 
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)} 
+                    placeholder="Name" 
+                    style={{ padding: "10px", marginBottom: "10px", width: "80%" }}
+                />
+                <input 
+                    type="email" 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
+                    placeholder="Email" 
+                    style={{ padding: "10px", marginBottom: "10px", width: "80%" }}
+                />
+                <button 
+                    onClick={handleUpdate} 
+                    style={{ padding: "10px 20px", fontSize: "16px", cursor: "pointer" }}
+                >
+                    Update Member
+                </button>
+            </div>
         </div>
     );
 };

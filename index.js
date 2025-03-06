@@ -22,7 +22,7 @@ app.use(
 );
 app.use(morgan('dev'));
 
-app.use('/api/admin', authRoutes);
+app.use('/api/member', authRoutes);
 app.use('/api/admin', trainerRoutes);
 app.use('/api/admin', paymentRoutes);
 app.use('/api/admin', adminRoutes);

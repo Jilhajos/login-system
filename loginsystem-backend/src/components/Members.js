@@ -1,71 +1,50 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { useNavigate } from "react-router-dom";  // Import useNavigate
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios"; // Import axios for API calls
 
 const Members = () => {
-  const [members, setMembers] = useState([]);
-  const navigate = useNavigate();  // Initialize navigate function
-  
-  // Fetch member data
-  const fetchMembers = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        alert("Session expired. Please log in again.");
-        return;
-      }
+    const [members, setMembers] = useState([]);
+    const navigate = useNavigate();
+    const token = localStorage.getItem("token");
 
-      const response = await axios.get("http://localhost:5000/api/admin/members", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setMembers(response.data);
-    } catch (error) {
-      console.error("API Fetch Error:", error);
-      alert("Failed to fetch members.");
-    }
-  };
+    useEffect(() => {
+        const fetchMembers = async () => {
+            try {
+                const response = await axios.get("http://localhost:5000/api/admin/members", {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                setMembers(response.data);
+            } catch (error) {
+                console.error("Error fetching members:", error.response?.data?.error || error.message);
+            }
+        };
+        fetchMembers();
+    }, [token]);
 
-  useEffect(() => {
-    fetchMembers();
-  }, []);  // Refetch data every time the page is loaded
-
-  return (
-    <div>
-      <h1>Members List</h1>
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Phone</th>
-            <th>Age</th>
-            <th>Trainer</th>
-            <th>Membership Plan</th>
-            <th>Gender</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {members.map((member) => (
-            <tr key={member._id}>
-              <td>{member.name}</td>
-              <td>{member.email}</td>
-              <td>{member.phone}</td>
-              <td>{member.age}</td>
-              <td>{member.trainerName || "No Trainer"}</td>
-              <td>{member.membershipPlan}</td>
-              <td>{member.gender}</td>
-              <td>
-                <button onClick={() => navigate(`/editMember/${member._id}`)}>
-                  Edit
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+    return (
+        <div style={{ padding: "20px", textAlign: "center" }}>
+            <h2>Members List</h2>
+            <button 
+                onClick={() => navigate("/add-member")} 
+                style={{ padding: "10px 15px", marginBottom: "20px", cursor: "pointer" }}
+            >
+                Add Member
+            </button>
+            <ul style={{ listStyle: "none", padding: 0 }}>
+                {members.map((member) => (
+                    <li key={member._id} style={{ marginBottom: "10px" }}>
+                        {member.name} - {member.email}
+                        <button 
+                            onClick={() => navigate(`/edit-member/${member._id}`)} 
+                            style={{ marginLeft: "10px", padding: "5px 10px", cursor: "pointer" }}
+                        >
+                            Edit
+                        </button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
 };
 
 export default Members;
