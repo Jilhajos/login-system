@@ -1,21 +1,26 @@
 const express = require('express');
-const { adminLogin, getMembers, getMemberById, editMember, addMember } = require('../controllers/adminController');
-
 const router = express.Router();
+const { 
+    adminLogin, 
+    getMembers, 
+    getMemberById, 
+    editMember, 
+    addMember, 
+    forgotPassword, 
+    resetPassword 
+} = require('../controllers/adminController');
 
-// Admin login route
-router.post('/admin/login', adminLogin);
+// Admin authentication routes
+router.post('/login', adminLogin);
 
-// Fetch all members
-router.get('/admin/members', getMembers);
+// Member management routes
+router.get('/members', getMembers);
+router.get('/members/:memberId', getMemberById);
+router.put('/members/:memberId', editMember);
+router.post('/members', addMember);
 
-// Fetch a single member by ID (for editing)
-router.get('/admin/members/edit/:memberId', getMemberById);
-
-// Edit member details
-router.put('/admin/members/edit/:memberId', editMember);
-
-// Add new member
-router.post('/admin/members', addMember);
+// Password reset routes
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 module.exports = router;

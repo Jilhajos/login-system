@@ -24,16 +24,22 @@ const memberSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true // Set to false if password is optional
+    required: true
   },
   membership_plan: {
     type: String,
-    required: true  // Set to false if this field is optional
+    required: true
   },
   gender: {
     type: String,
-    required: true, // Set to false if gender is optional
-    enum: ['Male', 'Female', 'Other']  // Optional values
+    required: true,
+    enum: ['Male', 'Female', 'Other']
+  },
+  resetToken: {  // ✅ Added field to store the reset token
+    type: String
+  },
+  resetTokenExpiration: {  // ✅ Added field for expiration time
+    type: Date
   }
 });
 

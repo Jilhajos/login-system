@@ -1,24 +1,23 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const dotenv = require('dotenv');
-
-// Load environment variables from .env file
-dotenv.config();
-
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const Member = require('../models/Member');
 const Trainer = require('../models/Trainer');
+const { sendMail } = require('../utils/mailer');
+
+dotenv.config();
 
 // Admin login logic
 const adminLogin = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Check if email and password match the values in .env
         if (email !== process.env.ADMIN_EMAIL || password !== process.env.ADMIN_PASSWORD) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        // Create JWT token
         const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
         res.status(200).json({ message: 'Login successful', token });
@@ -37,7 +36,7 @@ const getMembers = async (req, res) => {
     }
 };
 
-// Fetch a single member (for editing)
+// Fetch a single member
 const getMemberById = async (req, res) => {
     try {
         const { memberId } = req.params;
@@ -56,11 +55,9 @@ const editMember = async (req, res) => {
         const { memberId } = req.params;
         const { name, email, phone, age, trainerName } = req.body;
 
-        // Find the member
         const member = await Member.findById(memberId);
         if (!member) return res.status(404).json({ error: 'Member not found' });
 
-        // If trainer is being updated, update the assigned members count
         let newTrainer = null;
         if (trainerName) {
             newTrainer = await Trainer.findOne({ name: new RegExp(`^${trainerName}$`, 'i') });
@@ -68,7 +65,6 @@ const editMember = async (req, res) => {
 
             if (!newTrainer.availability) return res.status(400).json({ error: 'Trainer is not available' });
 
-            // If the member already has a trainer, update the previous trainer's assigned member count
             if (member.trainer && member.trainer !== newTrainer.name) {
                 const previousTrainer = await Trainer.findOne({ name: member.trainer });
                 if (previousTrainer) {
@@ -78,14 +74,12 @@ const editMember = async (req, res) => {
             }
         }
 
-        // Update member details
         const updatedMember = await Member.findByIdAndUpdate(
             memberId,
             { name, email, phone, age, trainer: newTrainer ? newTrainer.name : member.trainer },
-            { new: true } // Ensures the updated document is returned
+            { new: true }
         );
 
-        // Update new trainer's assigned members count
         if (newTrainer) {
             newTrainer.assignedMembers = await Member.countDocuments({ trainer: newTrainer.name });
             await newTrainer.save();
@@ -97,13 +91,11 @@ const editMember = async (req, res) => {
     }
 };
 
+// Add new member
 const addMember = async (req, res) => {
     try {
-        console.log("Received Request Body:", req.body); // Log incoming data
+        const { name, email, phone, age, trainerName, password, membership_plan, gender } = req.body;
 
-        const { name, email, phone, age, trainerName, password, membership_plan, gender } = req.body; // ✅ Use correct field name
-
-        // Validate required fields
         if (!password || !membership_plan || !gender) {
             return res.status(400).json({ error: 'Password, Membership Plan, and Gender are required.' });
         }
@@ -116,14 +108,16 @@ const addMember = async (req, res) => {
             if (!newTrainer.availability) return res.status(400).json({ error: 'Trainer is not available' });
         }
 
+        const hashedPassword = await bcrypt.hash(password, 10);
+
         const newMember = new Member({
             name,
             email,
             phone,
             age,
             trainer: newTrainer ? newTrainer.name : null,
-            password,
-            membership_plan, // ✅ Corrected field name
+            password: hashedPassword,
+            membership_plan,
             gender
         });
 
@@ -140,5 +134,58 @@ const addMember = async (req, res) => {
     }
 };
 
+// Forgot Password - Send reset token via email
+const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const member = await Member.findOne({ email });
 
-module.exports = { adminLogin, getMembers, getMemberById, editMember, addMember };
+        if (!member) return res.status(404).json({ error: 'Member not found' });
+
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        member.resetToken = resetToken;
+        member.resetTokenExpiration = Date.now() + 3600000; // 1 hour expiration
+
+        await member.save();
+
+        const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
+        await sendMail(email, 'Password Reset Request', `Click the link to reset your password: ${resetLink}`);
+
+        res.status(200).json({ message: 'Password reset email sent' });
+    } catch (error) {
+        res.status(500).json({ error: 'Error sending password reset email', details: error.message });
+    }
+};
+
+// Reset Password
+const resetPassword = async (req, res) => {
+    try {
+        const { token, newPassword } = req.body;
+        const member = await Member.findOne({
+            resetToken: token,
+            resetTokenExpiration: { $gt: Date.now() }
+        });
+
+        if (!member) return res.status(400).json({ error: 'Invalid or expired token' });
+
+        member.password = await bcrypt.hash(newPassword, 10);
+        member.resetToken = undefined;
+        member.resetTokenExpiration = undefined;
+
+        await member.save();
+
+        res.status(200).json({ message: 'Password reset successful' });
+    } catch (error) {
+        res.status(500).json({ error: 'Error resetting password', details: error.message });
+    }
+};
+
+module.exports = { 
+    adminLogin, 
+    getMembers, 
+    getMemberById, 
+    editMember, 
+    addMember, 
+    forgotPassword, 
+    resetPassword 
+};

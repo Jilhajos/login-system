@@ -22,10 +22,10 @@ app.use(
 );
 app.use(morgan('dev'));
 
-app.use('/api', authRoutes);
-app.use('/api', trainerRoutes);
-app.use('/api', paymentRoutes);
-app.use('/api', adminRoutes);
+app.use('/api/admin', authRoutes);
+app.use('/api/admin', trainerRoutes);
+app.use('/api/admin', paymentRoutes);
+app.use('/api/admin', adminRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
