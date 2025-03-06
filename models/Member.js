@@ -1,17 +1,42 @@
 const mongoose = require('mongoose');
 
-const MemberSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    age: { type: Number, required: true },
-    gender: { type: String, required: true },
-    phone: { type: String, required: true, unique: true },
-    email: { type: String, required: true, unique: true },
-    address: { type: String },
-    emergency_contact: { type: String },
-    health_conditions: { type: String },
-    membership_plan: { type: String, required: true },
-    trainer: { type: String, required: true },
-    password: { type: String, required: true }
+const memberSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  phone: {
+    type: String,
+    required: true
+  },
+  age: {
+    type: Number,
+    required: true
+  },
+  trainer: {
+    type: String,
+    required: false
+  },
+  password: {
+    type: String,
+    required: true // Set to false if password is optional
+  },
+  membership_plan: {
+    type: String,
+    required: true  // Set to false if this field is optional
+  },
+  gender: {
+    type: String,
+    required: true, // Set to false if gender is optional
+    enum: ['Male', 'Female', 'Other']  // Optional values
+  }
 });
 
-module.exports = mongoose.model('Member', MemberSchema);
+const Member = mongoose.model('Member', memberSchema);
+
+module.exports = Member;

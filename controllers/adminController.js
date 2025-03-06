@@ -1,136 +1,144 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file
+dotenv.config();
+
 const Member = require('../models/Member');
 const Trainer = require('../models/Trainer');
-const Admin = require('../models/Admin');
 
-// ✅ Admin Registration
-const registerAdmin = async (req, res) => {
-    try {
-        const { name, email, password } = req.body;
-        if (!name || !email || !password) return res.status(400).json({ error: "All fields are required" });
-
-        const existingAdmin = await Admin.findOne({ email });
-        if (existingAdmin) return res.status(400).json({ error: "Email already registered" });
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const newAdmin = new Admin({ name, email, password: hashedPassword });
-
-        await newAdmin.save();
-        res.status(201).json({ message: "Admin registered successfully" });
-    } catch (error) {
-        res.status(500).json({ error: "Server error", details: error.message });
-    }
-};
-
-// ✅ Admin Login
-const loginAdmin = async (req, res) => {
+// Admin login logic
+const adminLogin = async (req, res) => {
     try {
         const { email, password } = req.body;
-        if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
 
-        const admin = await Admin.findOne({ email });
-        if (!admin) return res.status(401).json({ error: "Invalid credentials" });
+        // Check if email and password match the values in .env
+        if (email !== process.env.ADMIN_EMAIL || password !== process.env.ADMIN_PASSWORD) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
 
-        const isMatch = await bcrypt.compare(password, admin.password);
-        if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
+        // Create JWT token
+        const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-        const token = jwt.sign({ id: admin._id, email: admin.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        res.json({ message: "Login successful", token, adminId: admin._id });
+        res.status(200).json({ message: 'Login successful', token });
     } catch (error) {
-        res.status(500).json({ error: "Server error", details: error.message });
+        res.status(500).json({ error: 'Error logging in', details: error.message });
     }
 };
 
-// ✅ Fetch Members
+// Fetch all members
 const getMembers = async (req, res) => {
     try {
-        const members = await Member.find().select("-password");
-        res.json(members);
+        const members = await Member.find();
+        res.status(200).json(members);
     } catch (error) {
-        res.status(500).json({ error: "Error fetching members", details: error.message });
+        res.status(500).json({ error: 'Error fetching members', details: error.message });
     }
 };
 
-// ✅ Fetch Trainers
-const getTrainers = async (req, res) => {
+// Fetch a single member (for editing)
+const getMemberById = async (req, res) => {
     try {
-        const trainers = await Trainer.find();
-        res.json(trainers);
-    } catch (error) {
-        res.status(500).json({ error: "Error fetching trainers", details: error.message });
-    }
-};
-
-// ✅ Assign Trainer to a Member
-//const assignTrainer = async (req, res) => {
-    //try {
-        //const { trainerName } = req.body;
-        //const { memberId } = req.params;
-
-        //const trainer = await Trainer.findOne({ name: new RegExp(`^${trainerName}$`, "i") });
-        //if (!trainer) return res.status(404).json({ error: "Trainer not found" });
-
-        //if (!trainer.availability) return res.status(400).json({ error: "Trainer is not available" });
-
-        //const member = await Member.findById(memberId);
-        //if (!member) return res.status(404).json({ error: "Member not found" });
-
-        //member.trainer = trainer.name;
-        //await member.save();
-
-        //trainer.assignedMembers += 1;
-        //await trainer.save();
-
-        //res.status(200).json({ message: "Trainer assigned successfully", member });
-    //} catch (error) {
-       // res.status(500).json({ error: "Server error", details: error.message });
-    //}
-//};
-const assignTrainer = async (req, res) => {
-    try {
-        const { trainerName } = req.body;
         const { memberId } = req.params;
+        const member = await Member.findById(memberId);
+        if (!member) return res.status(404).json({ error: 'Member not found' });
 
-        // Find the requested trainer
-        const newTrainer = await Trainer.findOne({ name: new RegExp(`^${trainerName}$`, "i") });
-        if (!newTrainer) return res.status(404).json({ error: "Trainer not found" });
+        res.status(200).json(member);
+    } catch (error) {
+        res.status(500).json({ error: 'Error fetching member details', details: error.message });
+    }
+};
 
-        if (!newTrainer.availability) return res.status(400).json({ error: "Trainer is not available" });
+// Edit member details
+const editMember = async (req, res) => {
+    try {
+        const { memberId } = req.params;
+        const { name, email, phone, age, trainerName } = req.body;
 
         // Find the member
         const member = await Member.findById(memberId);
-        if (!member) return res.status(404).json({ error: "Member not found" });
+        if (!member) return res.status(404).json({ error: 'Member not found' });
 
-        // Check if the member already has a trainer
-        if (member.trainer && member.trainer !== newTrainer.name) {
-            // Find previous trainer
-            const previousTrainer = await Trainer.findOne({ name: member.trainer });
-            if (previousTrainer) {
-                // Decrement previous trainer's assigned members count
-                previousTrainer.assignedMembers = Math.max(0, previousTrainer.assignedMembers - 1);
-                await previousTrainer.save();
+        // If trainer is being updated, update the assigned members count
+        let newTrainer = null;
+        if (trainerName) {
+            newTrainer = await Trainer.findOne({ name: new RegExp(`^${trainerName}$`, 'i') });
+            if (!newTrainer) return res.status(404).json({ error: 'Trainer not found' });
+
+            if (!newTrainer.availability) return res.status(400).json({ error: 'Trainer is not available' });
+
+            // If the member already has a trainer, update the previous trainer's assigned member count
+            if (member.trainer && member.trainer !== newTrainer.name) {
+                const previousTrainer = await Trainer.findOne({ name: member.trainer });
+                if (previousTrainer) {
+                    previousTrainer.assignedMembers = Math.max(0, previousTrainer.assignedMembers - 1);
+                    await previousTrainer.save();
+                }
             }
         }
 
-        // ✅ Update trainer name and return updated member
+        // Update member details
         const updatedMember = await Member.findByIdAndUpdate(
             memberId,
-            { trainer: newTrainer.name },
-            { new: true } // Ensures we return the updated document
+            { name, email, phone, age, trainer: newTrainer ? newTrainer.name : member.trainer },
+            { new: true } // Ensures the updated document is returned
         );
 
-        // ✅ Update new trainer's assigned members count
-        newTrainer.assignedMembers = await Member.countDocuments({ trainer: newTrainer.name });
-        await newTrainer.save();
+        // Update new trainer's assigned members count
+        if (newTrainer) {
+            newTrainer.assignedMembers = await Member.countDocuments({ trainer: newTrainer.name });
+            await newTrainer.save();
+        }
 
-        res.status(200).json({ message: "Trainer assigned successfully", member: updatedMember });
+        res.status(200).json({ message: 'Member updated successfully', member: updatedMember });
     } catch (error) {
-        res.status(500).json({ error: "Server error", details: error.message });
+        res.status(500).json({ error: 'Error updating member', details: error.message });
+    }
+};
+
+const addMember = async (req, res) => {
+    try {
+        console.log("Received Request Body:", req.body); // Log incoming data
+
+        const { name, email, phone, age, trainerName, password, membership_plan, gender } = req.body; // ✅ Use correct field name
+
+        // Validate required fields
+        if (!password || !membership_plan || !gender) {
+            return res.status(400).json({ error: 'Password, Membership Plan, and Gender are required.' });
+        }
+
+        let newTrainer = null;
+        if (trainerName) {
+            newTrainer = await Trainer.findOne({ name: new RegExp(`^${trainerName}$`, 'i') });
+            if (!newTrainer) return res.status(404).json({ error: 'Trainer not found' });
+
+            if (!newTrainer.availability) return res.status(400).json({ error: 'Trainer is not available' });
+        }
+
+        const newMember = new Member({
+            name,
+            email,
+            phone,
+            age,
+            trainer: newTrainer ? newTrainer.name : null,
+            password,
+            membership_plan, // ✅ Corrected field name
+            gender
+        });
+
+        await newMember.save();
+
+        if (newTrainer) {
+            newTrainer.assignedMembers = await Member.countDocuments({ trainer: newTrainer.name });
+            await newTrainer.save();
+        }
+
+        res.status(201).json({ message: 'Member added successfully', member: newMember });
+    } catch (error) {
+        res.status(500).json({ error: 'Error adding member', details: error.message });
     }
 };
 
 
-
-
-module.exports = { registerAdmin, loginAdmin, getMembers, getTrainers, assignTrainer };
+module.exports = { adminLogin, getMembers, getMemberById, editMember, addMember };

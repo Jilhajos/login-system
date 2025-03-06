@@ -1,14 +1,21 @@
 const express = require('express');
+const { adminLogin, getMembers, getMemberById, editMember, addMember } = require('../controllers/adminController');
+
 const router = express.Router();
-const { registerAdmin, getMembers, getTrainers, loginAdmin, assignTrainer } = require('../controllers/adminController');
 
-// ✅ Admin Authentication Routes
-router.post('/admin/register', registerAdmin);
-router.post('/admin/login', loginAdmin);
+// Admin login route
+router.post('/admin/login', adminLogin);
 
-// ✅ Member & Trainer Management Routes
+// Fetch all members
 router.get('/admin/members', getMembers);
-router.get('/admin/trainers', getTrainers);  // Fixed missing route
-router.put('/admin/assign-trainer/:memberId', assignTrainer);
+
+// Fetch a single member by ID (for editing)
+router.get('/admin/members/edit/:memberId', getMemberById);
+
+// Edit member details
+router.put('/admin/members/edit/:memberId', editMember);
+
+// Add new member
+router.post('/admin/members', addMember);
 
 module.exports = router;
