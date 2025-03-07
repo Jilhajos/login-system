@@ -94,9 +94,9 @@ const getMemberById = async (req, res) => {
 const editMember = async (req, res) => {
     try {
         const { memberId } = req.params;
-        const { name, email, phone, age, trainerName } = req.body;
+        const { name, email, phone, age, trainerName, membership_plan, gender } = req.body;
 
-        // Find the member
+        // Find the existing member
         const member = await Member.findById(memberId);
         if (!member) return res.status(404).json({ error: 'Member not found' });
 
@@ -117,14 +117,22 @@ const editMember = async (req, res) => {
             }
         }
 
-        // Ensure database updates correctly
-        member.name = name;
-        member.email = email;
-        member.phone = phone;
-        member.age = age;
-        if (newTrainer) member.trainerName = newTrainer.name; // Assign new trainer if provided
-
-        await member.save(); // Explicitly save changes
+        // **Updated method: Use findByIdAndUpdate**
+        const updatedMember = await Member.findByIdAndUpdate(
+            memberId,
+            {
+                $set: {
+                    name: name || member.name,
+                    email: email || member.email,
+                    phone: phone || member.phone,
+                    age: age || member.age,
+                    trainerName: newTrainer ? newTrainer.name : member.trainerName,
+                    membership_plan: membership_plan || member.membership_plan,
+                    gender: gender || member.gender
+                }
+            },
+            { new: true } // Return the updated document
+        );
 
         // Update new trainer's assigned member count
         if (newTrainer) {
@@ -132,7 +140,7 @@ const editMember = async (req, res) => {
             await newTrainer.save();
         }
 
-        res.status(200).json({ message: 'Member updated successfully', member });
+        res.status(200).json({ message: 'Member updated successfully', member: updatedMember });
     } catch (error) {
         res.status(500).json({ error: 'Error updating member', details: error.message });
     }
