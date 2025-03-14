@@ -1,83 +1,89 @@
+require('dotenv').config(); // Load .env variables first
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
 const Member = require('../models/Member');
-const Trainer = require('../models/Trainer');
 
-const registerMember = async (req, res) => {
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+    console.error;
+    process.exit(1); // Stop the server if JWT secret is missing
+}
+
+// Function to generate a unique Membership ID
+const generateMembershipID = async () => {
+    let membershipID;
+    let isUnique = false;
+
+    while (!isUnique) {
+        membershipID = `GYM-${Math.floor(100000 + Math.random() * 900000)}`;
+        const existingMember = await Member.findOne({ membershipID });
+        if (!existingMember) {
+            isUnique = true; // Ensure ID is unique before assigning
+        }
+    }
+
+    return membershipID;
+};
+
+// Handle OTPless Authentication Response
+const handleOTPlessLogin = async (req, res) => {
+    const { email } = req.body; // OTPless sends email after OTP verification
+
     try {
-        const { name, age, gender, phone, email, address, emergency_contact, health_conditions, membership_plan, trainerName, password } = req.body;
+        // Check if the user already exists
+        let user = await Member.findOne({ email });
 
-        if (!name || !age || !phone || !membership_plan || !email || !password || !trainerName) {
-            return res.status(400).json({ error: "Missing required fields" });
+        if (!user) {
+            // New user → Redirect to registration page
+            return res.status(200).json({ message: "New user, redirect to registration", newUser: true, email });
         }
-        const existingMember = await Member.findOne({ $or: [{ email }, { phone }] });
-        if (existingMember) {
-            return res.status(400).json({ error: "Email or phone already in use" });
+
+        // Existing user → Generate JWT token & redirect to home page
+        const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: "1h" });
+
+        return res.status(200).json({ message: "Login Successful", token, user });
+
+    } catch (error) {
+        res.status(500).json({ error: "Authentication failed", details: error.message });
+    }
+};
+
+// Register New User and Auto-Login
+const registerUser = async (req, res) => {
+    const { name, email, phone, age, trainerName, gender, address} = req.body;
+
+    try {
+        // Check if user already exists
+        let existingUser = await Member.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ error: "User already registered" });
         }
-        const trainer = await Trainer.findOne({ name: trainerName });
-        if (!trainer) {
-            return res.status(404).json({ error: "Trainer not found" });
-        }
-        if (!trainer.availability) {
-            return res.status(400).json({ error: "Trainer is fully booked. Please choose another trainer." });
-        }
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const newMember = new Member({
+
+        // Generate unique membership ID
+        const membershipID = await generateMembershipID();
+
+        // Create new user in MongoDB
+        const newUser = new Member({ 
             name,
-            age,
+            address, 
+            email, 
+            phone, 
+            age, 
+            trainerName, 
+            membership_plan, 
             gender,
-            phone,
-            email,
-            address,
-            emergency_contact,
-            health_conditions,
-            membership_plan,
-            trainerName,
-            password: hashedPassword
+            membershipID 
         });
-        await newMember.save();
-        const updatedTrainer = await Trainer.findOneAndUpdate(
-            { name: trainerName },
-            { $inc: { assignedMembers: 1 } },
-            { new: true }
-        );
-        if (updatedTrainer.assignedMembers >= 5) {
-            await Trainer.findOneAndUpdate({ name: trainerName }, { availability: false });
-        }
-        res.status(201).json({ message: "Member registered successfully!", member: newMember });
+        await newUser.save();
+
+        // Auto-login: Generate JWT token after successful registration
+        const token = jwt.sign({ id: newUser._id, email: newUser.email }, JWT_SECRET, { expiresIn: "1h" });
+
+        return res.status(200).json({ message: "Registration successful, auto-logged in", token, user: newUser });
 
     } catch (error) {
-        res.status(500).json({ error: "Server error", details: error.message });
-    }
-};
-const loginMember = async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        if (!email || !password) {
-            return res.status(400).json({ error: "Email and password are required" });
-        }
-        const member = await Member.findOne({ email });
-        if (!member) {
-            return res.status(401).json({ error: "Invalid credentials" });
-        }
-        const isMatch = await bcrypt.compare(password, member.password);
-        if (!isMatch) {
-            return res.status(401).json({ error: "Invalid credentials" });
-        }
-        const token = jwt.sign({ id: member._id, email: member.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-        res.json({ message: "Login successful", token, memberId: member._id });
-    } catch (error) {
-        res.status(500).json({ error: "Server error", details: error.message });
-    }
-};
-const getMembers = async (req, res) => {
-    try {
-        const members = await Member.find();
-        res.json(members);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: "Failed to register user", details: error.message });
     }
 };
 
-module.exports = { registerMember, loginMember, getMembers };
+module.exports = { handleOTPlessLogin, registerUser };

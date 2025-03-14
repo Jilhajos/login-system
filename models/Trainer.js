@@ -1,11 +1,13 @@
 const mongoose = require('mongoose');
 
-const TrainerSchema = new mongoose.Schema({
-    name: { type: String, required: true, unique: true },
-    phone: { type: String, required: true, unique: true }, 
+const trainerSchema = new mongoose.Schema({
+    trainerID: { type: String, unique: true, required: true }, // Unique Trainer ID
+    trainer_name: { type: String, required: true, unique: true },
     specialization: { type: String },
-    assignedMembers: { type: Number, default: 0 },
-    availability: { type: Boolean, default: true }
+    phone_number: { type: String },
+    availability: { type: Boolean, default: true },
+    assigned_Members: { type: Number, default: 0 }
 });
 
-module.exports = mongoose.model('Trainer', TrainerSchema);
+const Trainer = mongoose.model('Trainer', trainerSchema);
+module.exports = Trainer;

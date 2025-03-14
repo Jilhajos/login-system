@@ -2,26 +2,26 @@ const express = require('express');
 const router = express.Router();
 const { 
     adminLogin, 
+    adminRegister, 
     getMembers, 
     getMemberById, 
     editMember, 
     addMember, 
-    deleteMember,  // Added deleteMember function
+    deleteMember,  
     forgotPassword, 
-    resetPassword,adminRegister 
+    resetPassword 
 } = require('../controllers/adminController');
 
 // Admin authentication routes
 router.post('/login', adminLogin);
-router.post('/register',adminRegister);
+router.post('/register', adminRegister); // Ensure this is secure
 
 // Member management routes
 router.get('/members', getMembers);
-router.get('/members/:memberId', getMemberById);
-router.put('/members/:memberId', editMember);
+router.get('/members/:membershipID', getMemberById); // Change if controller uses membershipID
+router.put('/members/:membershipID', editMember);    // Ensure consistency
 router.post('/members', addMember);
-router.delete('/members/delete/:memberId', deleteMember);  // Added DELETE route
-
+router.delete('/members/:membershipID', deleteMember); // RESTful format
 
 // Password reset routes
 router.post('/forgot-password', forgotPassword);

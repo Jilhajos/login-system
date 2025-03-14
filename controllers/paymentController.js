@@ -1,83 +1,152 @@
-require("dotenv").config();
-const axios = require("axios");
-const crypto = require("crypto");
+const axios = require('axios');
+const crypto = require('crypto');
+const { v4: uuidv4 } = require('uuid');
+const Member = require('../models/Member'); // Import the Member model
 
-async function initiatePayment(req, res, attempt = 1) {
+const MERCHANT_KEY = "96434309-7796-489d-8924-ab56988a6076";
+const MERCHANT_ID = "PGTESTPAYUAT86";
+
+const MERCHANT_BASE_URL = "https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/pay";
+const MERCHANT_STATUS_URL = "https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/status";
+
+const redirectUrl = "http://localhost:5000/api/payment/status";
+const successUrl = "http://localhost:3000/payment-success";
+const failureUrl = "http://localhost:3000/payment-failure";
+
+//Create Payment Order for PhonePe after verifying membership
+exports.createOrder = async (req, res) => {
     try {
-        // Load environment variables
-        const merchantId = process.env.MERCHANT_ID;
-        const saltKey = process.env.SALT_KEY;
-        const saltIndex = process.env.SALT_INDEX;
-        const phonePeUrl = process.env.PHONEPE_URL;
-        const callbackUrl = process.env.CALLBACK_URL;
+        const { membershipID, amount, membership_plan } = req.body;
+        if (!membershipID || !amount || !membership_plan) {
+            return res.status(400).json({ error: "Missing required fields" });
+        }
+        const member = await Member.findOne({ membershipID });
+        if (!member) {
+            return res.status(404).json({ error: "Member not found" });
+        }
 
-        // Generate a unique transaction ID
-        const transactionId = "TXN" + new Date().getTime();
+        const orderId = uuidv4();
 
-        // Request payload
-        const requestBody = {
-            merchantId: merchantId,
-            merchantTransactionId: transactionId,
-            merchantUserId: "MUID123",
-            amount: 100000,  // ₹1000 in paise
-            redirectUrl: "http://localhost:5000/payment-success",
-            redirectMode: "REDIRECT",
-            callbackUrl: callbackUrl,
-            paymentInstrument: { type: "PAY_PAGE" },
-            mobileNumber: "9876543210"
+        const paymentPayload = {
+            merchantId: MERCHANT_ID,
+            merchantUserId: membershipID,
+            mobileNumber: member.mobileNumber,
+            amount: amount * 100, // Convert to paise
+            merchantTransactionId: orderId,
+            redirectUrl: `${redirectUrl}?id=${orderId}&membershipID=${membershipID}&membership_plan=${membership_plan}`, // Passing membership ID and plan
+            redirectMode: 'POST',
+            paymentInstrument: { type: 'PAY_PAGE' }
         };
 
-        // Encode requestBody in Base64
-        const base64Request = Buffer.from(JSON.stringify(requestBody)).toString("base64");
+        // Encrypt the payload
+        const payload = Buffer.from(JSON.stringify(paymentPayload)).toString('base64');
+        const keyIndex = 1;
+        const stringToHash = payload + '/pg/v1/pay' + MERCHANT_KEY;
+        const sha256 = crypto.createHash('sha256').update(stringToHash).digest('hex');
+        const checksum = sha256 + '###' + keyIndex;
 
-        // Correct X-VERIFY Hash Calculation
-        const apiEndpoint = "/pg/v1/pay";
-        const xVerifyString = base64Request + apiEndpoint + saltKey;
-        const xVerifyHash = crypto.createHash("sha256").update(xVerifyString).digest("hex");
-        const xVerify = `${xVerifyHash}###${saltIndex}`;
+        const options = {
+            method: 'POST',
+            url: MERCHANT_BASE_URL,
+            headers: {
+                accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-VERIFY': checksum
+            },
+            data: { request: payload }
+        };
 
-        // Debug Logs (Remove in Production)
-        console.log("Base64 Request Body:", base64Request);
-        console.log("X-VERIFY Header:", xVerify);
+        const response = await axios.request(options);
 
-        // Send request to PhonePe API
-        const response = await axios.post(
-            phonePeUrl,
-            { request: base64Request },
-            {
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-VERIFY": xVerify
-                }
-            }
-        );
-
-        return res.json(response.data);
+        if (response.data.success === true) {
+            return res.status(200).json({ msg: "OK", url: response.data.data.instrumentResponse.redirectInfo.url });
+        } else {
+            return res.status(400).json({ error: "Failed to create order", details: response.data });
+        }
     } catch (error) {
-        console.error(`Attempt ${attempt}: Payment initiation error:`, error.message);
-
-        // If API returns 429 TOO_MANY_REQUESTS, retry with exponential backoff
-        if (error.response && error.response.status === 429) {
-            if (attempt < 5) {
-                const delay = Math.pow(2, attempt) * 1000; // Exponential backoff (2^attempt seconds)
-                console.warn(`Rate limit exceeded. Retrying in ${delay / 1000} seconds...`);
-                setTimeout(() => initiatePayment(req, res, attempt + 1), delay);
-                return;
-            } else {
-                console.error("Max retry attempts reached. Payment failed.");
-                return res.status(429).json({ error: "Too many requests. Please try again later." });
-            }
-        }
-
-        // If it's another error, return the error response
-        if (error.response) {
-            console.error("Response Data:", error.response.data);
-            return res.status(error.response.status).json(error.response.data);
-        }
-
-        return res.status(500).json({ error: "Payment initiation failed." });
+        console.error("Error in createOrder:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
     }
-}
+};
 
-// Export the function for Express
-exports.initiatePayment = initiatePayment;
+exports.checkPaymentStatus = async (req, res) => {
+    try {
+        const { id: merchantTransactionId, membershipID, membership_plan } = req.query;
+
+        if (!merchantTransactionId || !membershipID || !membership_plan) {
+            return res.status(400).json({ error: "Transaction ID, Membership ID, and Membership Plan are required" });
+        }
+
+        const keyIndex = 1;
+        const stringToHash = `/pg/v1/status/${MERCHANT_ID}/${merchantTransactionId}` + MERCHANT_KEY;
+        const sha256 = crypto.createHash('sha256').update(stringToHash).digest('hex');
+        const checksum = sha256 + '###' + keyIndex;
+
+        const options = {
+            method: 'GET',
+            url: `${MERCHANT_STATUS_URL}/${MERCHANT_ID}/${merchantTransactionId}`,
+            headers: {
+                accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-VERIFY': checksum,
+                'X-MERCHANT-ID': MERCHANT_ID
+            },
+        };
+
+        const response = await axios.request(options);
+
+        if (!response.data.success) {
+            // If payment failed, set membership status to inactive
+            await Member.findOneAndUpdate(
+                { membershipID },
+                { membershipStatus: "Inactive" }
+            );
+            return res.redirect(failureUrl);
+        }
+
+        // ✅ Ensure the member exists before updating
+        const member = await Member.findOne({ membershipID });
+        if (!member) {
+            return res.status(404).json({ error: "Member not found" });
+        }
+
+        // ✅ Calculate renewal date based on the membership plan
+        let renewalDate = new Date();
+
+        if (membership_plan === "monthly") {
+            renewalDate.setMonth(renewalDate.getMonth() + 1);
+        } else if (membership_plan === "quarterly") {
+            renewalDate.setMonth(renewalDate.getMonth() + 3);
+        } else if (membership_plan === "yearly") {
+            renewalDate.setFullYear(renewalDate.getFullYear() + 1);
+        } else {
+            return res.status(400).json({ error: "Invalid membership plan" });
+        }
+
+        // ✅ Debugging: Log to ensure the date is calculated
+        console.log(`Renewal Date for ${membershipID}:`, renewalDate);
+
+        // ✅ Update member details in DB (Using correct field `renewalDate`)
+        const updateResult = await Member.findOneAndUpdate(
+            { membershipID },
+            {
+                payment_date: new Date(), // ✅ Corrected
+                renewal_date: renewalDate, // ✅ Corrected
+                amount_Paid: response.data.data.amount / 100, // ✅ Corrected
+                payment_status: "completed", // ✅ Corrected
+                membership_status: "Active",
+                membership_plan: membership_plan
+            },
+            { new: true }
+        );
+        
+        if (!updateResult) {
+            return res.status(500).json({ error: "Failed to update member details" });
+        }
+
+        return res.redirect(successUrl);
+    } catch (error) {
+        console.error("Error in checkPaymentStatus:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+};

@@ -22,9 +22,9 @@ app.use(
 );
 app.use(morgan('dev'));
 
-app.use('/api/member', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/admin', trainerRoutes);
-app.use('/api/admin', paymentRoutes);
+app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 
 const PORT = process.env.PORT || 5000;

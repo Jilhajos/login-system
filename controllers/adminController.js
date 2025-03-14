@@ -10,51 +10,48 @@ const { sendMail } = require('../utils/mailer');
 
 dotenv.config();
 
-// Admin Registration logic
+
+const normalizeKeys = (obj) => {
+    const newObj = {};
+    for (let key in obj) {
+        const newKey = key.toLowerCase().replace(/\s+/g, "_"); 
+        newObj[newKey] = obj[key];
+    }
+    return newObj;
+};
+
+// Admin Registration
 const adminRegister = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const normalizedBody = normalizeKeys(req.body);
+        const { email, password } = normalizedBody;
 
-        // Check if the admin already exists
         const existingAdmin = await Admin.findOne({ email });
-        if (existingAdmin) {
-            return res.status(400).json({ error: 'Admin already exists with this email' });
-        }
+        if (existingAdmin) return res.status(400).json({ error: 'Admin already exists' });
 
-        // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Create a new admin user
-        const newAdmin = new Admin({
-            email,
-            password: hashedPassword,
-        });
+        const newAdmin = new Admin({ email, password: hashedPassword });
+        await newAdmin.save();
 
-        await newAdmin.save();  // Save the new admin to the database
         res.status(201).json({ message: 'Admin registered successfully' });
     } catch (error) {
         res.status(500).json({ error: 'Error registering admin', details: error.message });
     }
 };
 
-// Admin login logic
+// Admin Login
 const adminLogin = async (req, res) => {
     try {
-        const { email, password } = req.body;
-
-        // Check if the email exists in the Admin model
+        const normalizedBody = normalizeKeys(req.body);
+        const { email, password } = normalizedBody;
         const admin = await Admin.findOne({ email });
-        if (!admin) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
 
-        // Check if the password matches
+        if (!admin) return res.status(401).json({ error: 'Invalid credentials' });
+
         const isPasswordValid = await bcrypt.compare(password, admin.password);
-        if (!isPasswordValid) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
+        if (!isPasswordValid) return res.status(401).json({ error: 'Invalid credentials' });
 
-        // Generate JWT token
         const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
         res.status(200).json({ message: 'Login successful', token });
@@ -63,177 +60,22 @@ const adminLogin = async (req, res) => {
     }
 };
 
-// Fetch all members
-const getMembers = async (req, res) => {
-    try {
-        const members = await Member.find();
-        res.status(200).json(members);
-    } catch (error) {
-        res.status(500).json({ error: 'Error fetching members', details: error.message });
-    }
-};
-
-// Fetch a single member
-const getMemberById = async (req, res) => {
-    try {
-        const { memberId } = req.params;
-        const member = await Member.findById(memberId);
-        if (!member) return res.status(404).json({ error: 'Member not found' });
-
-        res.status(200).json({
-            ...member.toObject(),
-            trainerName: member.trainerName,  // Rename trainer to trainerName
-            trainer: undefined  // Hide trainer field
-        });
-    } catch (error) {
-        res.status(500).json({ error: 'Error fetching member', details: error.message });
-    }
-};
-
-// Edit a member
-const editMember = async (req, res) => {
-    try {
-        const { memberId } = req.params;
-        const { name, email, phone, age, trainerName, membership_plan, gender } = req.body;
-
-        // Find the existing member
-        const member = await Member.findById(memberId);
-        if (!member) return res.status(404).json({ error: 'Member not found' });
-
-        let newTrainer = null;
-        if (trainerName) {
-            newTrainer = await Trainer.findOne({ name: new RegExp(`^${trainerName}$`, 'i') });
-            if (!newTrainer) return res.status(404).json({ error: 'Trainer not found' });
-
-            if (!newTrainer.availability) return res.status(400).json({ error: 'Trainer is not available' });
-
-            // Update previous trainer's assigned count
-            if (member.trainerName && member.trainerName !== newTrainer.name) {
-                const previousTrainer = await Trainer.findOne({ name: member.trainerName });
-                if (previousTrainer) {
-                    previousTrainer.assignedMembers = Math.max(0, previousTrainer.assignedMembers - 1);
-                    await previousTrainer.save();
-                }
-            }
-        }
-
-        // **Updated method: Use findByIdAndUpdate**
-        const updatedMember = await Member.findByIdAndUpdate(
-            memberId,
-            {
-                $set: {
-                    name: name || member.name,
-                    email: email || member.email,
-                    phone: phone || member.phone,
-                    age: age || member.age,
-                    trainerName: newTrainer ? newTrainer.name : member.trainerName,
-                    membership_plan: membership_plan || member.membership_plan,
-                    gender: gender || member.gender
-                }
-            },
-            { new: true } // Return the updated document
-        );
-
-        // Update new trainer's assigned member count
-        if (newTrainer) {
-            newTrainer.assignedMembers = await Member.countDocuments({ trainerName: newTrainer.name });
-            await newTrainer.save();
-        }
-
-        res.status(200).json({ message: 'Member updated successfully', member: updatedMember });
-    } catch (error) {
-        res.status(500).json({ error: 'Error updating member', details: error.message });
-    }
-};
-
-// Add new member
-const addMember = async (req, res) => {
-    try {
-        const { name, email, phone, age, trainerName, password, membership_plan, gender } = req.body;
-
-        if (!password || !membership_plan || !gender) {
-            return res.status(400).json({ error: 'Password, Membership Plan, and Gender are required.' });
-        }
-
-        let newTrainer = null;
-        if (trainerName) {
-            newTrainer = await Trainer.findOne({ name: new RegExp(`^${trainerName}$`, 'i') });
-            if (!newTrainer) return res.status(404).json({ error: 'Trainer not found' });
-
-            if (!newTrainer.availability) return res.status(400).json({ error: 'Trainer is not available' });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const newMember = new Member({
-            name,
-            email,
-            phone,
-            age,
-            trainerName: newTrainer ? newTrainer.name : null,
-            password: hashedPassword,
-            membership_plan,
-            gender
-        });
-
-        await newMember.save();
-
-        if (newTrainer) {
-            newTrainer.assignedMembers = await Member.countDocuments({ trainerName: newTrainer.name });
-            await newTrainer.save();
-        }
-
-        res.status(201).json({ message: 'Member added successfully', member: newMember });
-    } catch (error) {
-        res.status(500).json({ error: 'Error adding member', details: error.message });
-    }
-};
-
-// Delete member and update trainer's assigned members count
-const deleteMember = async (req, res) => {
-    try {
-        const { memberId } = req.params;
-
-        const member = await Member.findById(memberId);
-        if (!member) return res.status(404).json({ error: 'Member not found' });
-
-        // If member has an assigned trainer, update the trainer's assigned member count
-        if (member.trainerName) {
-            const trainer = await Trainer.findOne({ name: member.trainerName });
-            if (trainer) {
-                trainer.assignedMembers = Math.max(0, trainer.assignedMembers - 1);
-                await trainer.save();
-            }
-        }
-
-        await Member.findByIdAndDelete(memberId);
-
-        res.status(200).json({ message: 'Member deleted successfully' });
-    } catch (error) {
-        res.status(500).json({ error: 'Error deleting member', details: error.message });
-    }
-};
-
-// Forgot Password - Send reset instruction email to admin
+// Forgot Password
 const forgotPassword = async (req, res) => {
     try {
-        const { email } = req.body;
+        const normalizedBody = normalizeKeys(req.body);
+        const { email } = normalizedBody;
 
-        // Check if the email matches the admin email from the Admin model
         const admin = await Admin.findOne({ email });
-        if (!admin) {
-            return res.status(404).json({ error: 'Admin not found' });
-        }
+        if (!admin) return res.status(404).json({ error: 'Admin not found' });
 
-        // Generate a reset token
         const resetToken = crypto.randomBytes(32).toString('hex');
-        
-        // You can store the reset token in a database or session here for verification later
 
-        // Construct the reset password link
+        admin.resetToken = resetToken;
+        admin.resetTokenExpiry = Date.now() + 3600000;
+        await admin.save();
+
         const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
-
-        // Send reset password email to admin
         await sendMail(email, 'Admin Password Reset Request', `Click the link to reset your password: ${resetLink}`);
 
         res.status(200).json({ message: 'Password reset email sent' });
@@ -244,27 +86,21 @@ const forgotPassword = async (req, res) => {
 
 const resetPassword = async (req, res) => {
     try {
-        const { email, newPassword } = req.body;
+        const normalizedBody = normalizeKeys(req.body);
+        const { email, new_password } = normalizedBody;
 
-        // Check if the email exists in the Admin model
         const admin = await Admin.findOne({ email });
         if (!admin) {
             return res.status(404).json({ error: 'Admin not found' });
         }
-
-        // If newPassword is not provided, return an error
-        if (!newPassword) {
+        if (!new_password) {
             return res.status(400).json({ error: 'New password is required' });
         }
+        const hashedPassword = await bcrypt.hash(new_password, 10);
 
-        // Hash the new password
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-        // Update the admin password in the database
         admin.password = hashedPassword;
         await admin.save();
 
-        // Send a confirmation email
         await sendMail(email, 'Your password has been reset', 'Your password has been successfully reset.');
 
         res.status(200).json({ message: 'Password reset successful' });
@@ -273,15 +109,142 @@ const resetPassword = async (req, res) => {
     }
 };
 
-
-module.exports = { 
-    adminRegister,  // Added admin registration
-    adminLogin, 
-    getMembers, 
-    getMemberById, 
-    editMember, 
-    addMember, 
-    deleteMember,  // Added delete functionality
-    forgotPassword, 
-    resetPassword 
+const getMembers = async (req, res) => {
+    try {
+        const members = await Member.find();
+        res.status(200).json(members);
+    } catch (error) {
+        res.status(500).json({ error: 'Error fetching members', details: error.message });
+    }
 };
+
+const getMemberById = async (req, res) => {
+    try {
+        const { membershipID } = req.params;
+        const member = await Member.findOne({ membershipID });
+
+        if (!member) return res.status(404).json({ error: 'Member not found' });
+
+        res.status(200).json(member);
+    } catch (error) {
+        res.status(500).json({ error: 'Error fetching member', details: error.message });
+    }
+};
+
+const editMember = async (req, res) => {
+    try {
+        const normalizedBody = normalizeKeys(req.body);
+
+        const { membershipID } = req.params;
+        const { full_name, email, phone_number, age, trainer_name, membership_plan, gender } = normalizedBody;
+
+        const member = await Member.findOne({ membershipID });
+        if (!member) return res.status(404).json({ error: 'Member not found' });
+
+        let newTrainer = null;
+        if (trainer_name) {
+            newTrainer = await Trainer.findOne({ trainer_name: new RegExp(`^${trainer_name}$`, 'i') });
+            if (!newTrainer) return res.status(404).json({ error: 'Trainer not found' });
+
+            if (!newTrainer.availability) return res.status(400).json({ error: 'Trainer is not available' });
+
+            if (member.trainer_name !== newTrainer.trainer_name) {
+                const previousTrainer = await Trainer.findOne({ trainer_name: member.trainer_name });
+                if (previousTrainer) {
+                    previousTrainer.assigned_Members = Math.max(0, previousTrainer.assigned_Members - 1);
+                    await previousTrainer.save();
+                }
+            }
+        }
+
+        const updatedMember = await Member.findOneAndUpdate(
+            { membershipID },
+            { full_name, email, phone_number, age, trainer_name: newTrainer ? newTrainer.trainer_name : member.trainer_name, membership_plan, gender },
+            { new: true }
+        );
+
+        if (newTrainer) {
+            newTrainer.assigned_Members = await Member.countDocuments({ trainer_name: newTrainer.trainer_name });
+            await newTrainer.save();
+        }
+
+        res.status(200).json({ message: 'Member updated successfully', member: updatedMember });
+    } catch (error) {
+        res.status(500).json({ error: 'Error updating member', details: error.message });
+    }
+};
+
+const addMember = async (req, res) => {
+    try {
+        const mappedBody = normalizeKeys(req.body);
+
+        const { full_name, email, phone_number, age, trainer_name, password, membership_plan, gender } = mappedBody;
+
+        let newTrainer = null;
+        if (trainer_name) {
+            newTrainer = await Trainer.findOne({ trainer_name: new RegExp(`^${trainer_name}$`, 'i') });
+            if (!newTrainer) return res.status(404).json({ error: 'Trainer not found' });
+
+            if (!newTrainer.availability) return res.status(400).json({ error: 'Trainer is not available' });
+        }
+        let membershipID;
+        let isUnique = false;
+        while (!isUnique) {
+            membershipID = `GYM${Math.floor(100000 + Math.random() * 900000)}`;
+            const existingMember = await Member.findOne({ membershipID });
+            if (!existingMember) isUnique = true;
+        }
+
+        const newMember = new Member({
+            full_name,
+            email,
+            phone_number,
+            age,
+            trainer_name: newTrainer ? newTrainer.trainer_name : null,
+            membership_plan,
+            gender,
+            membershipID 
+        });
+
+        await newMember.save();
+
+        if (newTrainer) {
+            newTrainer.assigned_Members = await Member.countDocuments({ trainer_name: newTrainer.trainer_name });
+            await newTrainer.save();
+        }
+
+        res.status(201).json({ message: 'Member added successfully', member: newMember });
+    } catch (error) {
+        res.status(500).json({ error: 'Error adding member', details: error.message });
+    }
+};
+
+
+const deleteMember = async (req, res) => {
+
+    try {
+
+        const { membershipID } = req.params;
+
+        const member = await Member.findOne({ membershipID });
+        if (!member) return res.status(404).json({ error: 'Member not found' });
+
+        if (member.trainer_name) {
+            const trainer = await Trainer.findOne({ trainer_name: member.trainer_name });
+            if (trainer) {
+                trainer.assigned_Members = Math.max(0, trainer.assigned_Members - 1);
+                await trainer.save();
+            }
+        }
+
+        await Member.findOneAndDelete({ membershipID });
+
+        res.status(200).json({ message: 'Member deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ error: 'Error deleting member', details: error.message });
+    }
+};
+
+
+
+module.exports = { adminRegister, adminLogin, forgotPassword, resetPassword, getMembers, getMemberById, editMember, addMember,deleteMember };
