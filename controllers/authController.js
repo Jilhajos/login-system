@@ -122,7 +122,6 @@ const registerUser = async (req, res) => {
             pincode,
             trainer_name,
             address,
-            membership_plan: membership_plan || null, // Ensure it aligns with schema default
             membershipID,
             amount_Paid: 0, // Default
             payment_status: 'pending', // Default
