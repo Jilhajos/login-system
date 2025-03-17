@@ -98,7 +98,7 @@ const handleOTPlessLogin = async (req, res) => {
 // Register New User and Auto-Login
 const registerUser = async (req, res) => {
     const normalizedBody = normalizeKeys(req.body);
-    const { full_name, email, phone_number, age, gender, trainer_name, address, membership_plan } = normalizedBody;
+    const { full_name, email, phone_number, age, gender, trainer_name, address, emergency_contact, health_condition, pincode } = normalizedBody;
 
     try {
         // Check if user already exists
@@ -117,6 +117,9 @@ const registerUser = async (req, res) => {
             phone_number,
             age,
             gender,
+            emergency_contact,
+            health_condition,
+            pincode,
             trainer_name,
             address,
             membership_plan: membership_plan || null, // Ensure it aligns with schema default
