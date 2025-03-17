@@ -4,11 +4,11 @@ import axios from 'axios';
 const Checkout = () => {
   const handlePayment = async () => {
     const data = {
-        name: "New Member1",
-        mobileNumber: "559874743211",  // Ensure this is a string if needed
-        amount: 50,  // Amount in INR (will be converted to paise in backend)
-        membershipID: "GYM-881455-50132",  // Example membership ID
-        membership_plan: "monthly"  // Must be one of 'monthly', 'quarterly', or 'yearly
+        name: "sample3",
+        mobileNumber: "9875246312",  
+        amount: 70,  
+        membershipID: "GYM368585",  
+        membership_plan: "quarterly" 
       };
       
 

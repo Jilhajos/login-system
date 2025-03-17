@@ -14,8 +14,11 @@ const MemberSchema = new mongoose.Schema({
     payment_status: { type: String, enum: ['completed', 'pending'], default: 'pending' },
     membership_status: { type: String, enum: ['Active', 'Inactive'], default: 'Inactive' },
 
-    payment_date: { type: Date, default: null },  // Set to null initially (pending)
-    renewal_date: { type: Date, default: null }   // Set to null initially (pending)
+    payment_date: { type: Date, default: null }, 
+    renewal_date: { type: Date, default: null }, 
+
+    passport_photo: { type: Buffer },
+    photo_mime_type: { type: String }  // Storing MIME type (JPEG, PNG, etc.)
 });
 
 module.exports = mongoose.model('Member', MemberSchema);
