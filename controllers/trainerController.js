@@ -13,7 +13,7 @@ const normalizeKeys = (obj) => {
         const newKey = trimmedKey.toLowerCase().replace(/\s+/g, "_"); // Convert to lowercase & replace spaces with "_"
         newObj[newKey] = obj[key];
     }
-    console.log("Normalized Object:", newObj); // 🚀 Check transformation
+    console.log("Normalized Object:", newObj); 
     return newObj;
 };
 
@@ -21,9 +21,9 @@ const normalizeKeys = (obj) => {
 // Add Trainer (Now includes a unique trainerID)
 const addTrainer = async (req, res) => {
     try {
-        console.log("Raw Request Body:", req.body);  // 🚀 Check what is coming from Postman
+        console.log("Raw Request Body:", req.body); 
         const normalizedBody = normalizeKeys(req.body);
-        console.log("Normalized Body:", normalizedBody);  // 🚀 Check after key transformation
+        console.log("Normalized Body:", normalizedBody);
 
         const { trainer_name, specialization, phone_number } = normalizedBody;
 
@@ -49,7 +49,7 @@ const addTrainer = async (req, res) => {
         res.status(201).json({ message: "Trainer added successfully!", trainer: newTrainer });
 
     } catch (error) {
-        console.error("Server Error:", error); // 🚀 Log error
+        console.error("Server Error:", error);
         res.status(500).json({ error: "Server error", details: error.message });
     }
 };

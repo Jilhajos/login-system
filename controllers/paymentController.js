@@ -104,13 +104,13 @@ exports.checkPaymentStatus = async (req, res) => {
             return res.redirect(failureUrl);
         }
 
-        // ✅ Ensure the member exists before updating
+        // Ensure the member exists before updating
         const member = await Member.findOne({ membershipID });
         if (!member) {
             return res.status(404).json({ error: "Member not found" });
         }
 
-        // ✅ Calculate renewal date based on the membership plan
+        // Calculate renewal date based on the membership plan
         let renewalDate = new Date();
 
         if (membership_plan === "monthly") {
@@ -123,17 +123,17 @@ exports.checkPaymentStatus = async (req, res) => {
             return res.status(400).json({ error: "Invalid membership plan" });
         }
 
-        // ✅ Debugging: Log to ensure the date is calculated
+        // Debugging: Log to ensure the date is calculated
         console.log(`Renewal Date for ${membershipID}:`, renewalDate);
 
-        // ✅ Update member details in DB (Using correct field `renewalDate`)
+        //  Update member details in DB (Using correct field `renewalDate`)
         const updateResult = await Member.findOneAndUpdate(
             { membershipID },
             {
-                payment_date: new Date(), // ✅ Corrected
-                renewal_date: renewalDate, // ✅ Corrected
-                amount_Paid: response.data.data.amount / 100, // ✅ Corrected
-                payment_status: "completed", // ✅ Corrected
+                payment_date: new Date(), 
+                renewal_date: renewalDate, 
+                amount_Paid: response.data.data.amount / 100, 
+                payment_status: "completed", 
                 membership_status: "Active",
                 membership_plan: membership_plan
             },

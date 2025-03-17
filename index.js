@@ -17,7 +17,7 @@ app.use(express.json());
 app.use(
   cors({
     origin: "http://localhost:3000",
-    credentials: true, // ✅ Fix: Allow cookies & auth headers
+    credentials: true, 
   })
 );
 app.use(morgan('dev'));

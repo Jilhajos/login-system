@@ -40,14 +40,14 @@ const verifyToken = (req, res, next) => {
         return res.status(401).json({ error: "Access denied. No token provided." });
     }
 
-    console.log("🔍 Received Authorization Header:", authHeader); 
+    console.log("Received Authorization Header:", authHeader); 
 
     const token = authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : authHeader;
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.user = decoded;
-        console.log("✅ Decoded Token:", decoded); 
+        console.log("Decoded Token:", decoded); 
         next();
     } catch (error) {
         console.error("JWT Verification Error:", error.message);
